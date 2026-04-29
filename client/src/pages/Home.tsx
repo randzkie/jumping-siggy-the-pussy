@@ -238,16 +238,16 @@ export default function Home() {
     if (!gameEngineRef.current) {
       const initialSpawnDistance = 280 + Math.random() * 180;
       
-      // Generate initial street litter
+      // Generate initial street litter (reduced amount)
       const initialLitter: StreetLitter[] = [];
-      for (let i = 0; i < 15; i++) {
+      for (let i = 0; i < 6; i++) {
         initialLitter.push({
           x: Math.random() * canvas.width,
           y: canvas.height - 50 - Math.random() * 15,
           type: ['bottle', 'can', 'paper', 'bag', 'cigarette'][Math.floor(Math.random() * 5)] as StreetLitterType,
           size: 4 + Math.random() * 8,
           rotation: Math.random() * 360,
-          opacity: 0.3 + Math.random() * 0.4,
+          opacity: 0.2 + Math.random() * 0.3, // More subtle
         });
       }
 
@@ -461,7 +461,7 @@ export default function Home() {
 
     // Spawn street litter
     const spawnStreetLitter = () => {
-      if (Math.random() < 0.15) { // 15% chance per frame
+      if (Math.random() < 0.08) { // 8% chance per frame - less frequent
         const litterTypes: StreetLitterType[] = ['bottle', 'can', 'paper', 'bag', 'cigarette'];
         game.streetLitter.push({
           x: canvas.width,
@@ -469,7 +469,7 @@ export default function Home() {
           type: litterTypes[Math.floor(Math.random() * litterTypes.length)],
           size: 4 + Math.random() * 8,
           rotation: Math.random() * 360,
-          opacity: 0.3 + Math.random() * 0.4,
+          opacity: 0.2 + Math.random() * 0.3, // More subtle
         });
       }
     };
