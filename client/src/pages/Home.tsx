@@ -22,6 +22,7 @@ interface GameState {
 }
 
 type ObstacleType = 'trash' | 'dog' | 'overhead';
+type StreetLitterType = 'bottle' | 'can' | 'paper' | 'bag' | 'cigarette';
 
 interface Obstacle {
   x: number;
@@ -34,12 +35,20 @@ interface Obstacle {
   speedMultiplier?: number;
 }
 
-interface Debris {
+interface StreetLitter {
+  x: number;
+  y: number;
+  type: StreetLitterType;
+  size: number;
+  rotation: number;
+  opacity: number;
+}
+
+interface Cloud {
   x: number;
   y: number;
   width: number;
-  height: number;
-  speedMultiplier: number;
+  speed: number;
 }
 
 interface GameEngine {
@@ -57,8 +66,9 @@ interface GameEngine {
     animationCounter: number;
   };
   obstacles: Obstacle[];
-  debris: Debris[];
-  debrisSpawnRate: number;
+  streetLitter: StreetLitter[];
+  clouds: Cloud[];
+  roadLineOffset: number;
   score: number;
   speed: number;
   spawnRate: number;
@@ -227,6 +237,31 @@ export default function Home() {
     // Initialize game engine only once
     if (!gameEngineRef.current) {
       const initialSpawnDistance = 280 + Math.random() * 180;
+      
+      // Generate initial street litter
+      const initialLitter: StreetLitter[] = [];
+      for (let i = 0; i < 15; i++) {
+        initialLitter.push({
+          x: Math.random() * canvas.width,
+          y: canvas.height - 50 - Math.random() * 15,
+          type: ['bottle', 'can', 'paper', 'bag', 'cigarette'][Math.floor(Math.random() * 5)] as StreetLitterType,
+          size: 4 + Math.random() * 8,
+          rotation: Math.random() * 360,
+          opacity: 0.3 + Math.random() * 0.4,
+        });
+      }
+
+      // Generate initial clouds
+      const initialClouds: Cloud[] = [];
+      for (let i = 0; i < 4; i++) {
+        initialClouds.push({
+          x: Math.random() * canvas.width,
+          y: 20 + Math.random() * 80,
+          width: 40 + Math.random() * 60,
+          speed: 0.2 + Math.random() * 0.3,
+        });
+      }
+
       gameEngineRef.current = {
         siggy: {
           x: 50,
@@ -242,8 +277,9 @@ export default function Home() {
           animationCounter: 0,
         },
         obstacles: [],
-        debris: [],
-        debrisSpawnRate: 60 + Math.random() * 90,
+        streetLitter: initialLitter,
+        clouds: initialClouds,
+        roadLineOffset: 0,
         score: 0,
         speed: 2.6, // Normal starting run speed
         spawnRate: initialSpawnDistance, // distance until next spawn (dino-style random spacing)
@@ -322,6 +358,73 @@ export default function Home() {
       ctx.drawImage(processed, 0, 0, sw, sh, dx, dy, dw, dh);
     };
 
+    // Draw street litter (decorative only, no collision)
+    const drawStreetLitter = (litter: StreetLitter) => {
+      ctx.save();
+      ctx.translate(litter.x, litter.y);
+      ctx.rotate((litter.rotation * Math.PI) / 180);
+      ctx.globalAlpha = litter.opacity;
+
+      switch (litter.type) {
+        case 'bottle':
+          // Plastic bottle
+          ctx.fillStyle = '#8B4513';
+          ctx.fillRect(-litter.size / 2, -litter.size * 1.5, litter.size, litter.size * 3);
+          ctx.fillStyle = '#A0522D';
+          ctx.fillRect(-litter.size / 3, -litter.size * 1.8, litter.size * 0.7, litter.size * 0.6);
+          break;
+        case 'can':
+          // Soda can
+          ctx.fillStyle = '#C0C0C0';
+          ctx.fillRect(-litter.size / 2, -litter.size, litter.size, litter.size * 2);
+          ctx.fillStyle = '#FF6B6B';
+          ctx.fillRect(-litter.size / 2, -litter.size / 2, litter.size, litter.size / 2);
+          break;
+        case 'paper':
+          // Crumpled paper
+          ctx.fillStyle = '#FFFFFF';
+          ctx.beginPath();
+          ctx.arc(0, 0, litter.size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#CCCCCC';
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+          break;
+        case 'bag':
+          // Plastic bag
+          ctx.fillStyle = 'rgba(200, 200, 200, 0.7)';
+          ctx.fillRect(-litter.size, -litter.size / 2, litter.size * 2, litter.size);
+          ctx.fillRect(-litter.size / 2, -litter.size * 1.2, litter.size, litter.size / 2);
+          break;
+        case 'cigarette':
+          // Cigarette butt
+          ctx.fillStyle = '#FFF8DC';
+          ctx.fillRect(-litter.size / 3, -litter.size, litter.size * 0.7, litter.size * 2);
+          ctx.fillStyle = '#D2691E';
+          ctx.fillRect(-litter.size / 3, litter.size * 0.8, litter.size * 0.7, litter.size * 0.4);
+          break;
+      }
+
+      ctx.restore();
+    };
+
+    // Draw cloud
+    const drawCloud = (cloud: Cloud) => {
+      ctx.save();
+      ctx.globalAlpha = 0.15;
+      ctx.fillStyle = '#2d5a3d';
+      
+      // Draw simple cloud shape with circles
+      const baseY = cloud.y;
+      ctx.beginPath();
+      ctx.arc(cloud.x, baseY, cloud.width * 0.25, 0, Math.PI * 2);
+      ctx.arc(cloud.x + cloud.width * 0.3, baseY - cloud.width * 0.1, cloud.width * 0.3, 0, Math.PI * 2);
+      ctx.arc(cloud.x + cloud.width * 0.6, baseY, cloud.width * 0.25, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.restore();
+    };
+
     // Spawn obstacle
     const spawnObstacle = () => {
       const obstacleTypes: ObstacleType[] = ['trash', 'dog', 'overhead'];
@@ -356,32 +459,18 @@ export default function Home() {
       }
     };
 
-    // Spawn decorative trash on the walkway (non-colliding texture).
-    const spawnDebris = () => {
-      const trashSprite = spritesRef.current.trashBin;
-      if (!trashSprite) return;
-
-      // Scale debris down so it feels like texture rather than new obstacles.
-      const scale = 0.25 + Math.random() * 0.45; // 0.25 - 0.7
-      const width = Math.max(14, Math.floor(trashSprite.width * scale));
-      const height = Math.max(10, Math.floor(trashSprite.height * scale * 0.65));
-
-      const baseY = canvas.height - 20; // ground top
-      const y = baseY - height + (Math.random() * 6 - 3); // slight vertical variation
-
-      const debris: Debris = {
-        x: canvas.width + Math.random() * 40,
-        y,
-        width,
-        height,
-        speedMultiplier: 0.9 + Math.random() * 0.12, // subtle parallax vs obstacles
-      };
-
-      game.debris.push(debris);
-
-      // Keep cap to avoid unbounded growth.
-      if (game.debris.length > 50) {
-        game.debris.splice(0, game.debris.length - 50);
+    // Spawn street litter
+    const spawnStreetLitter = () => {
+      if (Math.random() < 0.15) { // 15% chance per frame
+        const litterTypes: StreetLitterType[] = ['bottle', 'can', 'paper', 'bag', 'cigarette'];
+        game.streetLitter.push({
+          x: canvas.width,
+          y: canvas.height - 50 - Math.random() * 15,
+          type: litterTypes[Math.floor(Math.random() * litterTypes.length)],
+          size: 4 + Math.random() * 8,
+          rotation: Math.random() * 360,
+          opacity: 0.3 + Math.random() * 0.4,
+        });
       }
     };
 
@@ -412,6 +501,32 @@ export default function Home() {
           game.siggy.isJumping = false;
         }
       }
+
+      // Update road line offset (scrolling road lines)
+      game.roadLineOffset = (game.roadLineOffset + game.speed) % 40;
+
+      // Update clouds
+      for (const cloud of game.clouds) {
+        cloud.x -= cloud.speed;
+        if (cloud.x + cloud.width < 0) {
+          cloud.x = canvas.width;
+          cloud.y = 20 + Math.random() * 80;
+          cloud.width = 40 + Math.random() * 60;
+        }
+      }
+
+      // Update street litter
+      for (let i = game.streetLitter.length - 1; i >= 0; i--) {
+        const litter = game.streetLitter[i];
+        litter.x -= game.speed * 0.8; // Slightly slower than obstacles for depth
+
+        if (litter.x < -20) {
+          game.streetLitter.splice(i, 1);
+        }
+      }
+
+      // Spawn new street litter
+      spawnStreetLitter();
 
       // Update obstacles
       for (let i = game.obstacles.length - 1; i >= 0; i--) {
@@ -475,24 +590,6 @@ export default function Home() {
         }
       }
 
-      // Update decorative debris (non-colliding walkway texture)
-      for (let i = game.debris.length - 1; i >= 0; i--) {
-        const d = game.debris[i];
-        d.x -= game.speed * d.speedMultiplier;
-        if (d.x + d.width < 0) {
-          game.debris.splice(i, 1);
-        }
-      }
-
-      game.debrisSpawnRate -= game.speed;
-      if (game.debrisSpawnRate <= 0) {
-        spawnDebris();
-        // More texture at higher speeds, but still bounded.
-        const minSpacing = Math.max(18, 70 - game.score / 10);
-        const maxSpacing = Math.max(minSpacing + 10, minSpacing + 60);
-        game.debrisSpawnRate = minSpacing + Math.random() * (maxSpacing - minSpacing);
-      }
-
       // Normal run at start, then gradually speed up as score grows.
       game.speed = Math.min(2.6 + game.score / 500, 4.4);
 
@@ -508,9 +605,18 @@ export default function Home() {
 
     // Draw game
     const draw = () => {
-      // Clear canvas
-      ctx.fillStyle = '#f5f1ed';
+      // Clear canvas with sky gradient
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      gradient.addColorStop(0, '#d4e7dd');
+      gradient.addColorStop(0.5, '#e8f0e8');
+      gradient.addColorStop(1, '#f5f1ed');
+      ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw clouds
+      for (const cloud of game.clouds) {
+        drawCloud(cloud);
+      }
 
       // Draw Ritual logo in background
       if (spritesRef.current.ritualLogo) {
@@ -524,25 +630,28 @@ export default function Home() {
         ctx.restore();
       }
 
-      // Draw ground
+      // Draw road/ground with texture
+      ctx.fillStyle = '#4a5f4a';
+      ctx.fillRect(0, canvas.height - 50, canvas.width, 30);
+      
+      // Draw road lines (dashed center line)
+      ctx.strokeStyle = '#d4c5a0';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([20, 15]);
+      ctx.lineDashOffset = -game.roadLineOffset;
+      ctx.beginPath();
+      ctx.moveTo(0, canvas.height - 35);
+      ctx.lineTo(canvas.width, canvas.height - 35);
+      ctx.stroke();
+      ctx.setLineDash([]); // Reset
+
+      // Draw ground edge
       ctx.fillStyle = '#2d5a3d';
       ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
 
-      // Draw decorative debris (non-colliding texture)
-      if (spritesRef.current.trashBin) {
-        for (const d of game.debris) {
-          drawSpriteWithTransparentWhite(
-            spritesRef.current.trashBin,
-            0,
-            0,
-            spritesRef.current.trashBin.width,
-            spritesRef.current.trashBin.height,
-            d.x,
-            d.y,
-            d.width,
-            d.height
-          );
-        }
+      // Draw street litter (behind everything)
+      for (const litter of game.streetLitter) {
+        drawStreetLitter(litter);
       }
 
       // Draw Siggy with animation (clean sprites with transparent backgrounds)
@@ -621,16 +730,23 @@ export default function Home() {
         }
       }
 
-      // Draw score
+      // Draw score with better styling
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+      ctx.shadowBlur = 3;
+      ctx.shadowOffsetX = 1;
+      ctx.shadowOffsetY = 1;
       ctx.fillStyle = '#2d5a3d';
-      ctx.font = 'bold 24px serif';
-      ctx.fillText(`Score: ${game.score}`, 20, 40);
-      ctx.font = '16px serif';
-      ctx.fillText(`Best: ${gameState.highScore}`, 20, 70);
+      ctx.font = 'bold 28px serif';
+      ctx.fillText(`Score: ${game.score}`, 20, 45);
+      ctx.font = '18px serif';
+      ctx.fillText(`Best: ${gameState.highScore}`, 20, 75);
+      ctx.restore();
 
       // Draw speed indicator
-      ctx.font = '12px serif';
-      ctx.fillText(`Speed: ${game.speed.toFixed(1)}x`, 20, 90);
+      ctx.fillStyle = '#2d5a3d';
+      ctx.font = '14px serif';
+      ctx.fillText(`Speed: ${game.speed.toFixed(1)}x`, 20, 100);
 
       // Draw crawl indicator
       if (game.siggy.isCrawling) {
@@ -738,9 +854,22 @@ export default function Home() {
       game.score = 0;
       game.speed = 2.6; // Normal starting speed
       game.obstacles = [];
-      game.debris = [];
-      game.debrisSpawnRate = 60 + Math.random() * 90;
       game.spawnRate = 280 + Math.random() * 180;
+      game.roadLineOffset = 0;
+      
+      // Reset street litter
+      game.streetLitter = [];
+      for (let i = 0; i < 15; i++) {
+        game.streetLitter.push({
+          x: Math.random() * canvas.width,
+          y: canvas.height - 50 - Math.random() * 15,
+          type: ['bottle', 'can', 'paper', 'bag', 'cigarette'][Math.floor(Math.random() * 5)] as StreetLitterType,
+          size: 4 + Math.random() * 8,
+          rotation: Math.random() * 360,
+          opacity: 0.3 + Math.random() * 0.4,
+        });
+      }
+
       game.siggy.y = canvas.height - 100;
       game.siggy.velocityY = 0;
       game.siggy.isJumping = false;
