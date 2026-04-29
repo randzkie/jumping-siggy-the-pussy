@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { getLoginUrl } from '@/const';
-import { connectWallet, formatAddress, getWalletState, isMetaMaskAvailable, type WalletState } from '@/lib/wallet';
+import { connectWallet, disconnectWallet, formatAddress, getWalletState, isMetaMaskAvailable, type WalletState } from '@/lib/wallet';
 import { submitProofOfPresence, waitForTransaction } from '@/lib/ritual-tx';
 
 const SIGGY_RUNNING_FRAMES_URL = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663486032989/ZbgRLzMTREe6UC24SXuh8R/siggy-running-clean-Pfsud86v8uhqjd7mJUA4ZQ.webp';
@@ -154,6 +154,18 @@ export default function Home() {
     if (state.error) {
       setTxStatus(`Error: ${state.error}`);
     }
+  };
+
+  // Handle wallet disconnection
+  const handleDisconnectWallet = async () => {
+    const state = await disconnectWallet();
+    setWalletState(state);
+    setGameState((prev) => ({
+      ...prev,
+      walletConnected: state.isConnected,
+    }));
+    setTxStatus('');
+    setTxLoading(false);
   };
 
   // Submit proof-of-presence transaction
@@ -673,10 +685,18 @@ export default function Home() {
         <div className="text-center mb-6">
           {isMetaMaskAvailable() ? (
             walletState.isConnected ? (
-              <div className="inline-block px-4 py-2 rounded-lg" style={{ backgroundColor: '#e8f5e9', borderColor: '#2d5a3d', border: '1px solid' }}>
+              <div className="inline-flex items-center gap-3 px-4 py-2 rounded-lg" style={{ backgroundColor: '#e8f5e9', borderColor: '#2d5a3d', border: '1px solid' }}>
                 <p className="text-sm" style={{ color: '#2d5a3d' }}>
                   ✓ Connected: {formatAddress(walletState.address || '')}
                 </p>
+                <Button
+                  onClick={handleDisconnectWallet}
+                  variant="secondary"
+                  className="px-4 py-1 text-sm font-semibold"
+                  style={{ backgroundColor: '#f5f1ed', color: '#2d5a3d', border: '1px solid #2d5a3d' }}
+                >
+                  Disconnect
+                </Button>
               </div>
             ) : (
               <Button

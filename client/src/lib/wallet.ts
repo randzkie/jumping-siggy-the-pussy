@@ -153,6 +153,50 @@ export const getWalletState = async (): Promise<WalletState> => {
   }
 };
 
+// Disconnect wallet (MetaMask may not support a true programmatic disconnect,
+// but permission revocation + state clearing provides the expected UX).
+export const disconnectWallet = async (): Promise<WalletState> => {
+  try {
+    if (!isMetaMaskAvailable()) {
+      return {
+        isConnected: false,
+        address: null,
+        chainId: null,
+        error: null,
+      };
+    }
+
+    const ethereum = (window as any).ethereum;
+
+    // Best-effort permission revocation (supported by MetaMask and some providers).
+    // If it fails, we still clear our local state below.
+    try {
+      if (typeof ethereum?.request === 'function') {
+        await ethereum.request({
+          method: 'wallet_revokePermissions',
+          params: [{ eth_accounts: {} }],
+        });
+      }
+    } catch {
+      // Ignore provider-specific revoke failures.
+    }
+
+    return {
+      isConnected: false,
+      address: null,
+      chainId: null,
+      error: null,
+    };
+  } catch (error: any) {
+    return {
+      isConnected: false,
+      address: null,
+      chainId: null,
+      error: error?.message || 'Failed to disconnect wallet',
+    };
+  }
+};
+
 // Format address for display
 export const formatAddress = (address: string): string => {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
