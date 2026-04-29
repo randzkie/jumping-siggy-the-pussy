@@ -182,3 +182,117 @@ Notes:
 If you redeploy contract with Foundry:
 1. Update `VITE_PRESENCE_CONTRACT_ADDRESS` in Railway Variables.
 2. Trigger a new deployment (required because `VITE_*` vars are build-time).
+
+## Deploy on Fly.io
+
+This repo is prepared for Fly with:
+- `Dockerfile`
+- `.dockerignore`
+- `fly.toml`
+
+### 1) Install and login
+
+1. Install Fly CLI: [https://fly.io/docs/flyctl/install/](https://fly.io/docs/flyctl/install/)
+2. Login:
+
+```bash
+fly auth login
+```
+
+### 2) Create app (first time only)
+
+From project root:
+
+```bash
+fly apps create jumping-siggy
+```
+
+If `jumping-siggy` is already taken globally, pick another name and update `app` in `fly.toml`.
+
+### 3) Set secrets (environment variables)
+
+Set required secrets:
+
+```bash
+fly secrets set \
+NODE_ENV=production \
+VITE_APP_ID=your_app_id \
+VITE_OAUTH_PORTAL_URL=https://your-oauth-portal \
+VITE_PRESENCE_CONTRACT_ADDRESS=0xYourFoundryDeployedContract \
+OAUTH_SERVER_URL=https://your-oauth-server \
+JWT_SECRET=your_strong_secret
+```
+
+Optional (feature-dependent):
+
+```bash
+fly secrets set \
+DATABASE_URL=... \
+OWNER_OPEN_ID=... \
+BUILT_IN_FORGE_API_URL=... \
+BUILT_IN_FORGE_API_KEY=... \
+VITE_FRONTEND_FORGE_API_KEY=... \
+VITE_FRONTEND_FORGE_API_URL=...
+```
+
+### 4) Deploy
+
+```bash
+fly deploy
+```
+
+### 5) Open app
+
+```bash
+fly open
+```
+
+### 6) Update contract address later
+
+When you redeploy with Foundry:
+
+```bash
+fly secrets set VITE_PRESENCE_CONTRACT_ADDRESS=0xNewAddress
+fly deploy
+```
+
+`VITE_*` values are embedded at build time, so redeploy is required after updates.
+
+## Deploy on Vercel (Temporary)
+
+This repo includes `vercel.json` for quick frontend deployment.
+
+Important:
+- This mode deploys the built frontend from `dist/public`.
+- Express server routes are not running in this temporary setup.
+- Game works, wallet connect works, and on-chain tx from browser works.
+- Server-dependent endpoints (OAuth server routes, tRPC server APIs) are not available unless you refactor them into Vercel Functions.
+
+### 1) Import project in Vercel
+
+1. Go to [Vercel](https://vercel.com/) and import your GitHub repo.
+2. Vercel will detect `vercel.json` automatically.
+
+### 2) Configure environment variables (Project -> Settings -> Environment Variables)
+
+Set these for frontend behavior:
+
+- `VITE_APP_ID`
+- `VITE_OAUTH_PORTAL_URL`
+- `VITE_PRESENCE_CONTRACT_ADDRESS`
+- `VITE_FRONTEND_FORGE_API_KEY` (if map feature used)
+- `VITE_FRONTEND_FORGE_API_URL` (if map feature used)
+
+Optional analytics keys if you use them in `index.html`:
+- `VITE_ANALYTICS_ENDPOINT`
+- `VITE_ANALYTICS_WEBSITE_ID`
+
+### 3) Deploy
+
+Push to your connected branch or click **Deploy** in Vercel.
+
+### 4) Verify
+
+1. Open deployed URL.
+2. Connect MetaMask on Ritual Net.
+3. Start game and confirm transaction from wallet.
