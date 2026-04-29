@@ -10,7 +10,8 @@ const SIGGY_CRAWLING_FRAMES_URL = 'https://d2xsxph8kpxj0f.cloudfront.net/3105196
 const TRASH_BIN_URL = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663486032989/ZbgRLzMTREe6UC24SXuh8R/trash-bin-clean-bHj6Xke2nTHccozhFxf2eE.webp';
 const DOG_OBSTACLE_URL = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663486032989/ZbgRLzMTREe6UC24SXuh8R/dog-animated-UZMpqB5obhcUh85euvMMEF.webp';
 const OVERHEAD_OBSTACLE_URL = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663486032989/ZbgRLzMTREe6UC24SXuh8R/overhead-clean-ayPE6TiiVEZG5Fqv4TcrZy.webp';
-const RITUAL_LOGO_URL = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663486032989/ZbgRLzMTREe6UC24SXuh8R/ritual-logo-Zf7HiiCkZGb7ure69PQcKv.webp';
+// Rendered as a transparent-background "watermark" behind the game canvas.
+const RITUAL_LOGO_URL = '/ritual-logo-bg.png';
 
 interface GameState {
   isRunning: boolean;
@@ -33,6 +34,14 @@ interface Obstacle {
   speedMultiplier?: number;
 }
 
+interface Debris {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  speedMultiplier: number;
+}
+
 interface GameEngine {
   siggy: {
     x: number;
@@ -48,6 +57,8 @@ interface GameEngine {
     animationCounter: number;
   };
   obstacles: Obstacle[];
+  debris: Debris[];
+  debrisSpawnRate: number;
   score: number;
   speed: number;
   spawnRate: number;
@@ -231,6 +242,8 @@ export default function Home() {
           animationCounter: 0,
         },
         obstacles: [],
+        debris: [],
+        debrisSpawnRate: 60 + Math.random() * 90,
         score: 0,
         speed: 2.6, // Normal starting run speed
         spawnRate: initialSpawnDistance, // distance until next spawn (dino-style random spacing)
@@ -289,6 +302,10 @@ export default function Home() {
       return processedCanvas;
     };
 
+    // Logo background transparency is pre-baked into `client/public/ritual-logo-bg.png`.
+    // Keep this helper as an identity function for clarity/maintainability.
+    const getLogoTransparentBg = (image: HTMLImageElement) => image;
+
     const drawSpriteWithTransparentWhite = (
       image: HTMLImageElement,
       sx: number,
@@ -336,6 +353,35 @@ export default function Home() {
           speedMultiplier: randomType === 'dog' ? 1.25 : 1.05,
         };
         game.obstacles.push(obstacle);
+      }
+    };
+
+    // Spawn decorative trash on the walkway (non-colliding texture).
+    const spawnDebris = () => {
+      const trashSprite = spritesRef.current.trashBin;
+      if (!trashSprite) return;
+
+      // Scale debris down so it feels like texture rather than new obstacles.
+      const scale = 0.25 + Math.random() * 0.45; // 0.25 - 0.7
+      const width = Math.max(14, Math.floor(trashSprite.width * scale));
+      const height = Math.max(10, Math.floor(trashSprite.height * scale * 0.65));
+
+      const baseY = canvas.height - 20; // ground top
+      const y = baseY - height + (Math.random() * 6 - 3); // slight vertical variation
+
+      const debris: Debris = {
+        x: canvas.width + Math.random() * 40,
+        y,
+        width,
+        height,
+        speedMultiplier: 0.9 + Math.random() * 0.12, // subtle parallax vs obstacles
+      };
+
+      game.debris.push(debris);
+
+      // Keep cap to avoid unbounded growth.
+      if (game.debris.length > 50) {
+        game.debris.splice(0, game.debris.length - 50);
       }
     };
 
@@ -429,6 +475,24 @@ export default function Home() {
         }
       }
 
+      // Update decorative debris (non-colliding walkway texture)
+      for (let i = game.debris.length - 1; i >= 0; i--) {
+        const d = game.debris[i];
+        d.x -= game.speed * d.speedMultiplier;
+        if (d.x + d.width < 0) {
+          game.debris.splice(i, 1);
+        }
+      }
+
+      game.debrisSpawnRate -= game.speed;
+      if (game.debrisSpawnRate <= 0) {
+        spawnDebris();
+        // More texture at higher speeds, but still bounded.
+        const minSpacing = Math.max(18, 70 - game.score / 10);
+        const maxSpacing = Math.max(minSpacing + 10, minSpacing + 60);
+        game.debrisSpawnRate = minSpacing + Math.random() * (maxSpacing - minSpacing);
+      }
+
       // Normal run at start, then gradually speed up as score grows.
       game.speed = Math.min(2.6 + game.score / 500, 4.4);
 
@@ -450,31 +514,36 @@ export default function Home() {
 
       // Draw Ritual logo in background
       if (spritesRef.current.ritualLogo) {
-        const logoSize = 150;
+        const logoSize = 125;
         const logoX = canvas.width / 2 - logoSize / 2;
         const logoY = canvas.height / 2 - logoSize / 2;
         ctx.save();
-        ctx.globalAlpha = 0.9;
-        ctx.shadowColor = '#2bff7a';
-        ctx.shadowBlur = 32;
-        ctx.drawImage(
-          spritesRef.current.ritualLogo,
-          logoX,
-          logoY,
-          logoSize,
-          logoSize
-        );
-        ctx.shadowBlur = 0;
-        ctx.globalCompositeOperation = 'source-atop';
-        ctx.globalAlpha = 0.45;
-        ctx.fillStyle = '#35ff86';
-        ctx.fillRect(logoX, logoY, logoSize, logoSize);
+        const transparentLogo = getLogoTransparentBg(spritesRef.current.ritualLogo);
+        ctx.globalAlpha = 1;
+        ctx.drawImage(transparentLogo ?? spritesRef.current.ritualLogo, logoX, logoY, logoSize, logoSize);
         ctx.restore();
       }
 
       // Draw ground
       ctx.fillStyle = '#2d5a3d';
       ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
+
+      // Draw decorative debris (non-colliding texture)
+      if (spritesRef.current.trashBin) {
+        for (const d of game.debris) {
+          drawSpriteWithTransparentWhite(
+            spritesRef.current.trashBin,
+            0,
+            0,
+            spritesRef.current.trashBin.width,
+            spritesRef.current.trashBin.height,
+            d.x,
+            d.y,
+            d.width,
+            d.height
+          );
+        }
+      }
 
       // Draw Siggy with animation (clean sprites with transparent backgrounds)
       if (game.siggy.isCrawling && spritesRef.current.siggyCrawling) {
@@ -568,6 +637,24 @@ export default function Home() {
         ctx.fillStyle = '#2d5a3d';
         ctx.font = 'bold 14px serif';
         ctx.fillText('CRAWLING', game.siggy.x - 10, game.siggy.y - 10);
+      } else if (game.gameActive) {
+        // Small "ahead" hint to make the gameplay feel friendlier.
+        const siggyFrontX = game.siggy.x + game.siggy.width;
+        const lookAhead = 220;
+        const candidates = game.obstacles
+          .filter((o) => o.x < siggyFrontX + lookAhead && o.x + o.width > game.siggy.x)
+          .sort((a, b) => a.x - b.x);
+
+        const next = candidates[0];
+        if (next?.type === 'overhead') {
+          ctx.fillStyle = '#2d5a3d';
+          ctx.font = 'bold 14px serif';
+          ctx.fillText('DOWN ARROW: CRAWL', game.siggy.x - 28, game.siggy.y - 14);
+        } else if (next && (next.type === 'trash' || next.type === 'dog') && !game.siggy.isJumping) {
+          ctx.fillStyle = '#2d5a3d';
+          ctx.font = 'bold 14px serif';
+          ctx.fillText('SPACE: JUMP', game.siggy.x - 6, game.siggy.y - 14);
+        }
       }
     };
 
@@ -651,6 +738,8 @@ export default function Home() {
       game.score = 0;
       game.speed = 2.6; // Normal starting speed
       game.obstacles = [];
+      game.debris = [];
+      game.debrisSpawnRate = 60 + Math.random() * 90;
       game.spawnRate = 280 + Math.random() * 180;
       game.siggy.y = canvas.height - 100;
       game.siggy.velocityY = 0;
