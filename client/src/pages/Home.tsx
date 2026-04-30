@@ -19,6 +19,8 @@ interface GameState {
   highScore: number;
   gameOver: boolean;
   walletConnected: boolean;
+  tokenBalance: number;
+  gamesPlayed: number;
 }
 
 type ObstacleType = 'trash' | 'dog' | 'overhead';
@@ -68,7 +70,6 @@ interface GameEngine {
   obstacles: Obstacle[];
   streetLitter: StreetLitter[];
   clouds: Cloud[];
-  roadLineOffset: number;
   score: number;
   speed: number;
   spawnRate: number;
@@ -101,6 +102,8 @@ export default function Home() {
     highScore: typeof window !== 'undefined' ? parseInt(localStorage.getItem('siggy-highscore') || '0', 10) : 0,
     gameOver: false,
     walletConnected: false,
+    tokenBalance: typeof window !== 'undefined' ? parseInt(localStorage.getItem('siggy-tokens') || '500', 10) : 500,
+    gamesPlayed: 0,
   });
 
   const [walletState, setWalletState] = useState<WalletState>({
@@ -168,6 +171,7 @@ export default function Home() {
   const handleConnectWallet = async () => {
     const state = await connectWallet();
     setWalletState(state);
+    // Preserve current token balance when connecting
     setGameState((prev) => ({
       ...prev,
       walletConnected: state.isConnected,
@@ -204,7 +208,14 @@ export default function Home() {
         const confirmed = await waitForTransaction(result.txHash);
 
         if (confirmed) {
-          setTxStatus('✓ Proof-of-presence recorded on Ritual Net!');
+          // Add 500 tokens on successful blockchain recording
+          const newTokenBalance = gameState.tokenBalance + 500;
+          localStorage.setItem('siggy-tokens', newTokenBalance.toString());
+          setGameState((prev) => ({
+            ...prev,
+            tokenBalance: newTokenBalance,
+          }));
+          setTxStatus('✓ Proof-of-presence recorded! +500 tokens added!');
           setTimeout(() => {
             setTxStatus('');
             startGame();
@@ -425,35 +436,54 @@ export default function Home() {
       ctx.restore();
     };
 
-    // Spawn obstacle
+    // Spawn obstacle with enhanced randomness
     const spawnObstacle = () => {
-      const obstacleTypes: ObstacleType[] = ['trash', 'dog', 'overhead'];
-      const randomType = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
+      // Weighted random selection for more variety
+      const rand = Math.random();
+      let randomType: ObstacleType;
+      
+      // Progressive difficulty: more overhead obstacles as score increases
+      const overheadChance = Math.min(0.15 + game.score / 2000, 0.35);
+      const dogChance = 0.4;
+      
+      if (rand < overheadChance) {
+        randomType = 'overhead';
+      } else if (rand < overheadChance + dogChance) {
+        randomType = 'dog';
+      } else {
+        randomType = 'trash';
+      }
 
       if (randomType === 'overhead') {
-        // Overhead obstacle positioned lower so Siggy can crawl under it
+        // Overhead obstacle with slight Y variation
+        const yVariation = Math.random() * 8 - 4; // +/- 4 pixels
         const obstacle: Obstacle = {
           x: canvas.width,
-          y: canvas.height - 87, // Lowered further so standing collides and crawl/jump choice is required
+          y: canvas.height - 87 + yVariation,
           width: 80,
           height: 40,
           type: 'overhead',
           animationFrame: 0,
           animationCounter: 0,
-          speedMultiplier: 1.05,
+          speedMultiplier: 0.95 + Math.random() * 0.2, // 0.95 - 1.15
         };
         game.obstacles.push(obstacle);
       } else {
-        // Ground-level obstacles
+        // Ground-level obstacles with variations
+        const widthVariation = randomType === 'dog' ? (45 + Math.random() * 10) : (48 + Math.random() * 8);
+        const heightVariation = randomType === 'dog' ? (55 + Math.random() * 10) : (58 + Math.random() * 8);
+        
         const obstacle: Obstacle = {
           x: canvas.width,
           y: canvas.height - 80,
-          width: 50,
-          height: 60,
+          width: widthVariation,
+          height: heightVariation,
           type: randomType,
           animationFrame: 0,
           animationCounter: 0,
-          speedMultiplier: randomType === 'dog' ? 1.25 : 1.05,
+          speedMultiplier: randomType === 'dog' 
+            ? (1.15 + Math.random() * 0.25)  // Dogs faster: 1.15 - 1.4
+            : (0.95 + Math.random() * 0.2),  // Trash varied: 0.95 - 1.15
         };
         game.obstacles.push(obstacle);
       }
@@ -501,9 +531,6 @@ export default function Home() {
           game.siggy.isJumping = false;
         }
       }
-
-      // Update road line offset (scrolling road lines)
-      game.roadLineOffset = (game.roadLineOffset + game.speed) % 40;
 
       // Update clouds
       for (const cloud of game.clouds) {
@@ -593,13 +620,27 @@ export default function Home() {
       // Normal run at start, then gradually speed up as score grows.
       game.speed = Math.min(2.6 + game.score / 500, 4.4);
 
-      // Dino-like random spacing based on travel distance, not fixed frame timers.
+      // Enhanced random spacing with occasional patterns
       game.spawnRate -= game.speed;
       if (game.spawnRate <= 0) {
         spawnObstacle();
-        const minSpacing = Math.max(220 - game.score / 40, 150);
-        const maxSpacing = Math.max(430 - game.score / 25, minSpacing + 90);
-        game.spawnRate = minSpacing + Math.random() * (maxSpacing - minSpacing);
+        
+        // Decide on spacing pattern
+        const patternRoll = Math.random();
+        const baseMinSpacing = Math.max(220 - game.score / 40, 150);
+        const baseMaxSpacing = Math.max(430 - game.score / 25, baseMinSpacing + 90);
+        
+        if (patternRoll < 0.15) {
+          // Occasional tight cluster (15% chance)
+          game.spawnRate = baseMinSpacing * 0.6 + Math.random() * 30;
+        } else if (patternRoll < 0.30) {
+          // Breather zone (15% chance)
+          game.spawnRate = baseMaxSpacing * 1.3 + Math.random() * 80;
+        } else {
+          // Normal random spacing (70% chance)
+          const variance = (baseMaxSpacing - baseMinSpacing) * (0.3 + Math.random() * 0.7);
+          game.spawnRate = baseMinSpacing + variance;
+        }
       }
     };
 
@@ -630,20 +671,22 @@ export default function Home() {
         ctx.restore();
       }
 
-      // Draw road/ground with texture
+      // Draw road/ground with simpler design
       ctx.fillStyle = '#4a5f4a';
       ctx.fillRect(0, canvas.height - 50, canvas.width, 30);
       
-      // Draw road lines (dashed center line)
-      ctx.strokeStyle = '#d4c5a0';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([20, 15]);
-      ctx.lineDashOffset = -game.roadLineOffset;
+      // Draw subtle road edge lines (static, not animated)
+      ctx.strokeStyle = 'rgba(212, 197, 160, 0.4)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(0, canvas.height - 35);
-      ctx.lineTo(canvas.width, canvas.height - 35);
+      ctx.moveTo(0, canvas.height - 48);
+      ctx.lineTo(canvas.width, canvas.height - 48);
       ctx.stroke();
-      ctx.setLineDash([]); // Reset
+      
+      ctx.beginPath();
+      ctx.moveTo(0, canvas.height - 22);
+      ctx.lineTo(canvas.width, canvas.height - 22);
+      ctx.stroke();
 
       // Draw ground edge
       ctx.fillStyle = '#2d5a3d';
@@ -741,49 +784,41 @@ export default function Home() {
       ctx.fillText(`Score: ${game.score}`, 20, 45);
       ctx.font = '18px serif';
       ctx.fillText(`Best: ${gameState.highScore}`, 20, 75);
+      
+      // Draw token balance
+      ctx.font = 'bold 16px serif';
+      ctx.fillStyle = '#d4a017';
+      ctx.fillText(`🪙 ${gameState.tokenBalance}`, 20, 100);
       ctx.restore();
 
       // Draw speed indicator
       ctx.fillStyle = '#2d5a3d';
       ctx.font = '14px serif';
-      ctx.fillText(`Speed: ${game.speed.toFixed(1)}x`, 20, 100);
+      ctx.fillText(`Speed: ${game.speed.toFixed(1)}x`, 20, 125);
 
       // Draw crawl indicator
       if (game.siggy.isCrawling) {
         ctx.fillStyle = '#2d5a3d';
         ctx.font = 'bold 14px serif';
         ctx.fillText('CRAWLING', game.siggy.x - 10, game.siggy.y - 10);
-      } else if (game.gameActive) {
-        // Small "ahead" hint to make the gameplay feel friendlier.
-        const siggyFrontX = game.siggy.x + game.siggy.width;
-        const lookAhead = 220;
-        const candidates = game.obstacles
-          .filter((o) => o.x < siggyFrontX + lookAhead && o.x + o.width > game.siggy.x)
-          .sort((a, b) => a.x - b.x);
-
-        const next = candidates[0];
-        if (next?.type === 'overhead') {
-          ctx.fillStyle = '#2d5a3d';
-          ctx.font = 'bold 14px serif';
-          ctx.fillText('DOWN ARROW: CRAWL', game.siggy.x - 28, game.siggy.y - 14);
-        } else if (next && (next.type === 'trash' || next.type === 'dog') && !game.siggy.isJumping) {
-          ctx.fillStyle = '#2d5a3d';
-          ctx.font = 'bold 14px serif';
-          ctx.fillText('SPACE: JUMP', game.siggy.x - 6, game.siggy.y - 14);
-        }
       }
     };
 
     const endGame = () => {
       game.gameActive = false;
       const newHighScore = Math.max(game.score, gameState.highScore);
+      const newTokenBalance = gameState.tokenBalance + game.score; // Add score to tokens
+      
       localStorage.setItem('siggy-highscore', newHighScore.toString());
+      localStorage.setItem('siggy-tokens', newTokenBalance.toString());
+      
       setGameState((prev) => ({
         ...prev,
         gameOver: true,
         score: game.score,
         highScore: newHighScore,
         isRunning: false,
+        tokenBalance: newTokenBalance,
       }));
     };
 
@@ -842,31 +877,39 @@ export default function Home() {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [spritesLoaded, gameState.highScore, gameState.gameOver]);
+  }, [spritesLoaded, gameState.highScore, gameState.gameOver, gameState.tokenBalance]);
 
   const startGame = () => {
+    // Check if player has enough tokens
+    if (gameState.tokenBalance < 50) {
+      return; // Don't start if insufficient tokens
+    }
+
     if (gameEngineRef.current) {
       const game = gameEngineRef.current;
       const canvas = canvasRef.current;
       if (!canvas) return;
+
+      // Deduct 50 tokens per game
+      const newTokenBalance = gameState.tokenBalance - 50;
+      localStorage.setItem('siggy-tokens', newTokenBalance.toString());
 
       game.gameActive = true;
       game.score = 0;
       game.speed = 2.6; // Normal starting speed
       game.obstacles = [];
       game.spawnRate = 280 + Math.random() * 180;
-      game.roadLineOffset = 0;
       
       // Reset street litter
       game.streetLitter = [];
-      for (let i = 0; i < 15; i++) {
+      for (let i = 0; i < 6; i++) {
         game.streetLitter.push({
           x: Math.random() * canvas.width,
           y: canvas.height - 50 - Math.random() * 15,
           type: ['bottle', 'can', 'paper', 'bag', 'cigarette'][Math.floor(Math.random() * 5)] as StreetLitterType,
           size: 4 + Math.random() * 8,
           rotation: Math.random() * 360,
-          opacity: 0.3 + Math.random() * 0.4,
+          opacity: 0.2 + Math.random() * 0.3, // More subtle
         });
       }
 
@@ -876,11 +919,14 @@ export default function Home() {
       game.siggy.isCrawling = false;
       game.siggy.animationFrame = 0;
       game.siggy.animationCounter = 0;
+      
       setGameState((prev) => ({
         ...prev,
         isRunning: true,
         gameOver: false,
         score: 0,
+        tokenBalance: newTokenBalance,
+        gamesPlayed: prev.gamesPlayed + 1,
       }));
       setTxStatus('');
     }
@@ -903,32 +949,50 @@ export default function Home() {
         <div className="text-center mb-6">
           {isMetaMaskAvailable() ? (
             walletState.isConnected ? (
-              <div className="inline-flex items-center gap-3 px-4 py-2 rounded-lg" style={{ backgroundColor: '#e8f5e9', borderColor: '#2d5a3d', border: '1px solid' }}>
-                <p className="text-sm" style={{ color: '#2d5a3d' }}>
-                  ✓ Connected: {formatAddress(walletState.address || '')}
-                </p>
-                <Button
-                  onClick={handleDisconnectWallet}
-                  variant="secondary"
-                  className="px-4 py-1 text-sm font-semibold"
-                  style={{ backgroundColor: '#f5f1ed', color: '#2d5a3d', border: '1px solid #2d5a3d' }}
-                >
-                  Disconnect
-                </Button>
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-3 px-4 py-2 rounded-lg" style={{ backgroundColor: '#e8f5e9', borderColor: '#2d5a3d', border: '1px solid' }}>
+                  <p className="text-sm" style={{ color: '#2d5a3d' }}>
+                    ✓ Connected: {formatAddress(walletState.address || '')}
+                  </p>
+                  <Button
+                    onClick={handleDisconnectWallet}
+                    variant="secondary"
+                    className="px-4 py-1 text-sm font-semibold"
+                    style={{ backgroundColor: '#f5f1ed', color: '#2d5a3d', border: '1px solid #2d5a3d' }}
+                  >
+                    Disconnect
+                  </Button>
+                </div>
+                <div className="inline-flex items-center gap-2 px-6 py-3 rounded-lg" style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}>
+                  <span className="text-2xl">🪙</span>
+                  <span className="text-lg font-bold">{gameState.tokenBalance} Tokens</span>
+                </div>
               </div>
             ) : (
-              <Button
-                onClick={handleConnectWallet}
-                className="px-6 py-2 text-sm font-semibold"
-                style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
-              >
-                Connect MetaMask
-              </Button>
+              <div className="space-y-3">
+                <Button
+                  onClick={handleConnectWallet}
+                  className="px-6 py-2 text-sm font-semibold"
+                  style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
+                >
+                  Connect MetaMask
+                </Button>
+                <div className="inline-flex items-center gap-2 px-6 py-3 rounded-lg" style={{ backgroundColor: '#fff3e0', borderColor: '#2d5a3d', border: '1px solid' }}>
+                  <span className="text-2xl">🪙</span>
+                  <span className="text-lg font-bold" style={{ color: '#2d5a3d' }}>{gameState.tokenBalance} Tokens (Guest)</span>
+                </div>
+              </div>
             )
           ) : (
-            <p className="text-sm" style={{ color: '#2d5a3d' }}>
-              MetaMask not detected. Play as guest or install MetaMask.
-            </p>
+            <div className="space-y-3">
+              <p className="text-sm" style={{ color: '#2d5a3d' }}>
+                MetaMask not detected. Play as guest or install MetaMask.
+              </p>
+              <div className="inline-flex items-center gap-2 px-6 py-3 rounded-lg" style={{ backgroundColor: '#fff3e0', borderColor: '#2d5a3d', border: '1px solid' }}>
+                <span className="text-2xl">🪙</span>
+                <span className="text-lg font-bold" style={{ color: '#2d5a3d' }}>{gameState.tokenBalance} Tokens (Guest)</span>
+              </div>
+            </div>
           )}
         </div>
 
@@ -965,23 +1029,65 @@ export default function Home() {
         <div className="text-center space-y-4">
           {!gameState.isRunning && !gameState.gameOver && spritesLoaded && (
             <>
-              {gameState.walletConnected ? (
-                <Button
-                  onClick={handleProofOfPresence}
-                  disabled={txLoading}
-                  className="px-8 py-3 text-lg font-semibold"
-                  style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
-                >
-                  {txLoading ? 'Processing...' : 'Start Game (Record on-chain)'}
-                </Button>
+              {gameState.tokenBalance < 50 ? (
+                <div className="p-6 rounded-lg" style={{ backgroundColor: '#ffebee', borderColor: '#c62828', border: '2px solid' }}>
+                  <p className="text-xl font-bold mb-3" style={{ color: '#c62828' }}>
+                    ⚠️ Insufficient Tokens!
+                  </p>
+                  <p className="text-sm mb-4" style={{ color: '#2d5a3d' }}>
+                    You need at least 50 tokens to play. Connect your wallet to get more tokens!
+                  </p>
+                  {!gameState.walletConnected && (
+                    <Button
+                      onClick={handleConnectWallet}
+                      className="px-6 py-3 text-lg font-semibold"
+                      style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
+                    >
+                      Connect Wallet for Tokens
+                    </Button>
+                  )}
+                  {gameState.walletConnected && (
+                    <Button
+                      onClick={handleProofOfPresence}
+                      disabled={txLoading}
+                      className="px-6 py-3 text-lg font-semibold"
+                      style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
+                    >
+                      {txLoading ? 'Processing...' : 'Get 500 Tokens (0.00001 gas)'}
+                    </Button>
+                  )}
+                </div>
               ) : (
-                <Button
-                  onClick={startGame}
-                  className="px-8 py-3 text-lg font-semibold"
-                  style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
-                >
-                  Start Game (Guest Mode)
-                </Button>
+                <>
+                  {gameState.walletConnected ? (
+                    <div className="space-y-3">
+                      <Button
+                        onClick={handleProofOfPresence}
+                        disabled={txLoading}
+                        className="px-8 py-3 text-lg font-semibold"
+                        style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
+                      >
+                        {txLoading ? 'Processing...' : 'Get 500 Tokens (0.00001 gas)'}
+                      </Button>
+                      <p className="text-xs" style={{ color: '#2d5a3d' }}>or</p>
+                      <Button
+                        onClick={startGame}
+                        className="px-8 py-3 text-lg font-semibold"
+                        style={{ backgroundColor: '#4a5f4a', color: '#f5f1ed' }}
+                      >
+                        Start Game (-50 tokens)
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={startGame}
+                      className="px-8 py-3 text-lg font-semibold"
+                      style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
+                    >
+                      Start Game (-50 tokens)
+                    </Button>
+                  )}
+                </>
               )}
             </>
           )}
@@ -991,13 +1097,21 @@ export default function Home() {
               <p className="text-2xl font-bold mb-4" style={{ color: '#2d5a3d' }}>
                 Game Over!
               </p>
-              <p className="text-lg mb-4" style={{ color: '#2d5a3d' }}>
-                Final Score: {gameState.score}
-              </p>
-              {!gameState.walletConnected && (
+              <div className="space-y-2 mb-4">
+                <p className="text-lg" style={{ color: '#2d5a3d' }}>
+                  Final Score: <strong>{gameState.score}</strong>
+                </p>
+                <p className="text-md" style={{ color: '#2d5a3d' }}>
+                  🪙 Tokens Earned: <strong>+{gameState.score}</strong>
+                </p>
+                <p className="text-sm" style={{ color: '#2d5a3d' }}>
+                  Total Balance: <strong>{gameState.tokenBalance} tokens</strong>
+                </p>
+              </div>
+              {!gameState.walletConnected && gameState.tokenBalance < 100 && (
                 <div className="mb-6 p-4 rounded-lg" style={{ backgroundColor: '#e3f2fd', borderColor: '#2d5a3d', border: '1px solid' }}>
                   <p className="text-sm mb-3" style={{ color: '#2d5a3d' }}>
-                    Connect your wallet to record your score on Ritual Net and compete with others!
+                    Connect your wallet to get 500 tokens per transaction and never run out!
                   </p>
                   <Button
                     onClick={handleConnectWallet}
@@ -1008,18 +1122,36 @@ export default function Home() {
                   </Button>
                 </div>
               )}
-              <Button
-                onClick={resetGame}
-                className="px-8 py-3 text-lg font-semibold"
-                style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
-              >
-                Play Again
-              </Button>
+              {gameState.tokenBalance >= 50 ? (
+                <Button
+                  onClick={resetGame}
+                  className="px-8 py-3 text-lg font-semibold"
+                  style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
+                >
+                  Play Again (-50 tokens)
+                </Button>
+              ) : (
+                <div className="p-4 rounded-lg" style={{ backgroundColor: '#ffebee', borderColor: '#c62828', border: '1px solid' }}>
+                  <p className="text-sm mb-3" style={{ color: '#c62828' }}>
+                    Not enough tokens to play again. Connect wallet for more!
+                  </p>
+                  <Button
+                    onClick={handleConnectWallet}
+                    className="px-4 py-2 text-sm font-semibold"
+                    style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
+                  >
+                    Connect Wallet
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
           <p className="text-sm" style={{ color: '#2d5a3d' }}>
             Press <strong>SPACE</strong> to jump | <strong>DOWN ARROW</strong> to crawl | <strong>TAP</strong> to jump
+          </p>
+          <p className="text-xs" style={{ color: '#2d5a3d' }}>
+            💰 50 tokens per game | Score adds to token balance
           </p>
         </div>
       </div>
