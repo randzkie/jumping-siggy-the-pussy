@@ -945,7 +945,7 @@ export default function Home() {
           <p className="text-lg mt-2" style={{ color: '#2d5a3d' }}>An endless runner on Ritual Net</p>
         </div>
 
-        {/* Wallet Connection */}
+      {/*   Wallet Connection
         <div className="text-center mb-6">
           {isMetaMaskAvailable() ? (
             walletState.isConnected ? (
@@ -972,6 +972,7 @@ export default function Home() {
               <div className="space-y-3">
                 <Button
                   onClick={handleConnectWallet}
+                  
                   className="px-6 py-2 text-sm font-semibold"
                   style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
                 >
@@ -995,7 +996,7 @@ export default function Home() {
             </div>
           )}
         </div>
-
+ */}
         {/* Game Canvas */}
         <div className="flex justify-center mb-8">
           <canvas
