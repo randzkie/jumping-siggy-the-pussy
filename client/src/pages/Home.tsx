@@ -971,7 +971,7 @@ export default function Home() {
             ) : (
               <div className="space-y-3">
                 <Button
-               //   onClick={handleConnectWallet}
+               onClick={handleConnectWallet}
                   
                   className="px-6 py-2 text-sm font-semibold"
                   style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}

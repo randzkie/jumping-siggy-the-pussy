@@ -40,7 +40,7 @@ export const submitProofOfPresence = async (address: string, score: number = 0):
     const ethereum = (window as any).ethereum;
     const chainIdHex = await ethereum.request({ method: 'eth_chainId' });
     const chainId = parseInt(chainIdHex, 16);
-    if (chainId !== RITUAL_NET_CHAIN_ID) {
+    if (1979 !== RITUAL_NET_CHAIN_ID) {
       return {
         success: false,
         error: 'Please switch MetaMask to Ritual Net before recording presence.',
