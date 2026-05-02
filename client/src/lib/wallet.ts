@@ -1,4 +1,4 @@
-// Wallet utilities for MetaMask integration
+// Wallet utilities for Multi-wallet integration (MetaMask, OKX, Rabby, etc.)
 
 export interface WalletState {
   isConnected: boolean;
@@ -9,32 +9,32 @@ export interface WalletState {
 
 export const RITUAL_NET_CHAIN_ID = 696; // Ritual Net chain ID
 
-// Check if MetaMask is available
-// export const isMetaMaskAvailable = (): boolean => {
-//   return typeof window !== 'undefined' && (window as any).ethereum !== undefined;
-// };
-export const isMetaMaskAvailable = (): boolean => {
-  if (typeof window === 'undefined') return false;
+// Get the available Ethereum provider
+export const getProvider = () => {
+  if (typeof window === 'undefined') return null;
 
-  return Boolean(
-    (window as any).ethereum ||
-    (window as any).okxwallet?.ethereum
-  );
+  const win = window as any;
+  // Detect provider in order of preference
+  return win.okxwallet?.ethereum || win.rabby || win.ethereum || null;
+};
+
+// Check if any EVM wallet is available
+export const isWalletAvailable = (): boolean => {
+  return getProvider() !== null;
 };
 
 // Connect wallet
 export const connectWallet = async (): Promise<WalletState> => {
   try {
-    if (!isMetaMaskAvailable()) {
+    const ethereum = getProvider();
+    if (!ethereum) {
       return {
         isConnected: false,
         address: null,
         chainId: null,
-        error: 'MetaMask is not installed',
+        error: 'No EVM wallet (MetaMask, OKX, Rabby) detected.',
       };
     }
-
-    const ethereum = (window as any).ethereum;
 
     // Request account access
     const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
@@ -62,7 +62,7 @@ export const connectWallet = async (): Promise<WalletState> => {
                 {
                   chainId: `0x${RITUAL_NET_CHAIN_ID.toString(16)}`,
                   chainName: 'Ritual Net',
-                  rpcUrls: ['https://rpc.ritualfoundation.org'],
+                  rpcUrls: ['https://rpc.ritualnet.io'],
                   nativeCurrency: {
                     name: 'RITUAL',
                     symbol: 'RITUAL',
@@ -77,7 +77,7 @@ export const connectWallet = async (): Promise<WalletState> => {
               isConnected: false,
               address: null,
               chainId: null,
-              error: 'Failed to add Ritual Net to MetaMask',
+              error: 'Failed to add Ritual Net to your wallet.',
             };
           }
         } else {
@@ -85,12 +85,13 @@ export const connectWallet = async (): Promise<WalletState> => {
             isConnected: false,
             address: null,
             chainId: null,
-            error: 'Failed to switch to Ritual Net',
+            error: 'Failed to switch to Ritual Net. Please switch manually.',
           };
         }
       }
     }
 
+    // Re-verify chain ID after switch attempt
     const finalChainIdHex = await ethereum.request({ method: 'eth_chainId' });
     const finalChainId = parseInt(finalChainIdHex, 16);
     if (finalChainId !== RITUAL_NET_CHAIN_ID) {
@@ -121,7 +122,8 @@ export const connectWallet = async (): Promise<WalletState> => {
 // Get current wallet state
 export const getWalletState = async (): Promise<WalletState> => {
   try {
-    if (!isMetaMaskAvailable()) {
+    const ethereum = getProvider();
+    if (!ethereum) {
       return {
         isConnected: false,
         address: null,
@@ -130,7 +132,6 @@ export const getWalletState = async (): Promise<WalletState> => {
       };
     }
 
-    const ethereum = (window as any).ethereum;
     const accounts = await ethereum.request({ method: 'eth_accounts' });
 
     if (accounts.length === 0) {
@@ -161,11 +162,11 @@ export const getWalletState = async (): Promise<WalletState> => {
   }
 };
 
-// Disconnect wallet (MetaMask may not support a true programmatic disconnect,
-// but permission revocation + state clearing provides the expected UX).
+// Disconnect wallet
 export const disconnectWallet = async (): Promise<WalletState> => {
   try {
-    if (!isMetaMaskAvailable()) {
+    const ethereum = getProvider();
+    if (!ethereum) {
       return {
         isConnected: false,
         address: null,
@@ -174,10 +175,6 @@ export const disconnectWallet = async (): Promise<WalletState> => {
       };
     }
 
-    const ethereum = (window as any).ethereum;
-
-    // Best-effort permission revocation (supported by MetaMask and some providers).
-    // If it fails, we still clear our local state below.
     try {
       if (typeof ethereum?.request === 'function') {
         await ethereum.request({

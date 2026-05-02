@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { getLoginUrl } from '@/const';
-import { connectWallet, disconnectWallet, formatAddress, getWalletState, isMetaMaskAvailable, type WalletState } from '@/lib/wallet';
+import { connectWallet, disconnectWallet, formatAddress, getWalletState, isWalletAvailable, type WalletState } from '@/lib/wallet';
 import { submitProofOfPresence, waitForTransaction } from '@/lib/ritual-tx';
 
 const SIGGY_RUNNING_FRAMES_URL = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663486032989/ZbgRLzMTREe6UC24SXuh8R/siggy-running-clean-Pfsud86v8uhqjd7mJUA4ZQ.webp';
@@ -161,7 +161,6 @@ export default function Home() {
       setWalletState(state);
       
       if (state.isConnected) {
-        // If wallet connected, use tokens from localStorage (could be 0 or earned amount)
         const storedTokens = parseInt(localStorage.getItem('siggy-tokens') || '0', 10);
         setGameState((prev) => ({
           ...prev,
@@ -169,23 +168,12 @@ export default function Home() {
           tokenBalance: storedTokens,
         }));
       } else {
-        // Guest mode - ensure 500 tokens
         const storedTokens = parseInt(localStorage.getItem('siggy-tokens') || '500', 10);
-        if (storedTokens === 0) {
-          // Reset to 500 for guests
-          localStorage.setItem('siggy-tokens', '500');
-          setGameState((prev) => ({
-            ...prev,
-            walletConnected: false,
-            tokenBalance: 500,
-          }));
-        } else {
-          setGameState((prev) => ({
-            ...prev,
-            walletConnected: false,
-            tokenBalance: storedTokens,
-          }));
-        }
+        setGameState((prev) => ({
+          ...prev,
+          walletConnected: false,
+          tokenBalance: storedTokens || 500,
+        }));
       }
     };
     checkWallet();
@@ -995,7 +983,7 @@ export default function Home() {
 
         {/* Wallet Connection */}
         <div className="text-center mb-6">
-          {isMetaMaskAvailable() ? (
+          {isWalletAvailable() ? (
             walletState.isConnected ? (
               <div className="space-y-3">
                 <div className="inline-flex items-center gap-3 px-4 py-2 rounded-lg" style={{ backgroundColor: '#e8f5e9', borderColor: '#2d5a3d', border: '1px solid' }}>
@@ -1023,7 +1011,7 @@ export default function Home() {
                   className="px-6 py-2 text-sm font-semibold"
                   style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
                 >
-                  Connect MetaMask
+                  Connect Wallet
                 </Button>
                 <div className="inline-flex items-center gap-2 px-6 py-3 rounded-lg" style={{ backgroundColor: '#fff3e0', borderColor: '#2d5a3d', border: '1px solid' }}>
                   <span className="text-2xl">🪙</span>
@@ -1034,7 +1022,7 @@ export default function Home() {
           ) : (
             <div className="space-y-3">
               <p className="text-sm" style={{ color: '#2d5a3d' }}>
-                MetaMask not detected. Play as guest or install MetaMask.
+                No wallet detected. Play as guest or install MetaMask/OKX/Rabby.
               </p>
               <div className="inline-flex items-center gap-2 px-6 py-3 rounded-lg" style={{ backgroundColor: '#fff3e0', borderColor: '#2d5a3d', border: '1px solid' }}>
                 <span className="text-2xl">🪙</span>
@@ -1079,9 +1067,7 @@ export default function Home() {
               ×
             </button>
             <p className="text-sm pr-6" style={{ color: '#2d5a3d' }}>
-              {txStatus.includes('RPC endpoint') 
-                ? 'Network busy. Please try again in a moment.' 
-                : txStatus}
+              {txStatus}
             </p>
           </div>
         )}

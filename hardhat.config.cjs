@@ -16,8 +16,8 @@ module.exports = {
   },
   networks: {
     ritual: {
-      url: RITUAL_RPC_URL || 'https://rpc.ritualnet.io',
-      chainId: 696,
+      url: RITUAL_RPC_URL || 'https://rpc.ritualfoundation.org/',
+      chainId: 1979,
       accounts: DEPLOYER_PRIVATE_KEY ? [DEPLOYER_PRIVATE_KEY] : [],
     },
   },
