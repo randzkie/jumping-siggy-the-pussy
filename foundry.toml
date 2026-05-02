@@ -1,0 +1,9 @@
+[profile.default]
+src = "contracts"
+out = "artifacts-foundry"
+libs = ["node_modules", "lib"]
+solc = "0.8.20"
+
+[rpc_endpoints]
+ritual = "https://rpc.ritualnet.io"
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
