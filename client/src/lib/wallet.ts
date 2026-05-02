@@ -62,13 +62,13 @@ export const connectWallet = async (): Promise<WalletState> => {
                 {
                   chainId: `0x${RITUAL_NET_CHAIN_ID.toString(16)}`,
                   chainName: 'Ritual Net',
-                  rpcUrls: ['https://rpc.ritualnet.io'],
+                  rpcUrls: ['https://rpc.ritualfoundation.org'],
                   nativeCurrency: {
                     name: 'RITUAL',
                     symbol: 'RITUAL',
                     decimals: 18,
                   },
-                  blockExplorerUrls: ['https://explorer.ritualnet.io'],
+                  blockExplorerUrls: ['https://explorer.ritualfoundation.org'],
                 },
               ],
             });
