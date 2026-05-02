@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { getLoginUrl } from '@/const';
-import { connectWallet, disconnectWallet, formatAddress, getProvider, getWalletState, isWalletAvailable, RITUAL_NET_CHAIN_ID, switchToRitualChain, type WalletState } from '@/lib/wallet';
+import { connectWallet, disconnectWallet, formatAddress, getWalletState, isWalletAvailable, type WalletState } from '@/lib/wallet';
 import { submitProofOfPresence, waitForTransaction } from '@/lib/ritual-tx';
 
 const SIGGY_RUNNING_FRAMES_URL = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663486032989/ZbgRLzMTREe6UC24SXuh8R/siggy-running-clean-Pfsud86v8uhqjd7mJUA4ZQ.webp';
@@ -115,7 +115,6 @@ export default function Home() {
   const [txStatus, setTxStatus] = useState<string>('');
   const [txLoading, setTxLoading] = useState(false);
   const [spritesLoaded, setSpritesLoaded] = useState(false);
-  const [networkSwitching, setNetworkSwitching] = useState(false);
 
   const chromaCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const chromaCtxRef = useRef<CanvasRenderingContext2D | null>(null);
@@ -155,82 +154,54 @@ export default function Home() {
     loadSprite(RITUAL_LOGO_URL, 'ritualLogo');
   }, []);
 
-  // Check wallet state on mount and listen for chain/account changes
+  // Check wallet state on mount
   useEffect(() => {
     const checkWallet = async () => {
       const state = await getWalletState();
       setWalletState(state);
+      
       if (state.isConnected) {
         const storedTokens = parseInt(localStorage.getItem('siggy-tokens') || '0', 10);
-        setGameState((prev) => ({ ...prev, walletConnected: true, tokenBalance: storedTokens }));
+        setGameState((prev) => ({
+          ...prev,
+          walletConnected: true,
+          tokenBalance: storedTokens,
+        }));
       } else {
         const storedTokens = parseInt(localStorage.getItem('siggy-tokens') || '500', 10);
-        setGameState((prev) => ({ ...prev, walletConnected: false, tokenBalance: storedTokens || 500 }));
+        setGameState((prev) => ({
+          ...prev,
+          walletConnected: false,
+          tokenBalance: storedTokens || 500,
+        }));
       }
     };
     checkWallet();
-
-    // Listen for chain switches in the wallet
-    const ethereum = getProvider();
-    if (ethereum) {
-      const onChainChanged = (chainIdHex: string) => {
-        const chainId = parseInt(chainIdHex, 16);
-        setWalletState((prev) => ({ ...prev, chainId }));
-        setTxStatus('');
-      };
-
-      const onAccountsChanged = (accounts: string[]) => {
-        if (accounts.length === 0) {
-          // User disconnected from wallet side
-          setWalletState({ isConnected: false, address: null, chainId: null, error: null });
-          setGameState((prev) => ({ ...prev, walletConnected: false, tokenBalance: 500 }));
-          localStorage.setItem('siggy-tokens', '500');
-        } else {
-          setWalletState((prev) => ({ ...prev, address: accounts[0] }));
-        }
-      };
-
-      ethereum.on('chainChanged', onChainChanged);
-      ethereum.on('accountsChanged', onAccountsChanged);
-      return () => {
-        ethereum.removeListener('chainChanged', onChainChanged);
-        ethereum.removeListener('accountsChanged', onAccountsChanged);
-      };
-    }
   }, []);
 
-  // Derived: is the wallet on Ritual Chain?
-  const isOnCorrectChain = walletState.isConnected && walletState.chainId === RITUAL_NET_CHAIN_ID;
-
-  // Handle wallet connection — don't force chain switch here; banner handles it
+  // Handle wallet connection
   const handleConnectWallet = async () => {
     const state = await connectWallet();
     setWalletState(state);
-
+    
     if (state.isConnected) {
+      // Reset tokens to 0 when connecting wallet - force user to request from blockchain
       localStorage.setItem('siggy-tokens', '0');
-      setGameState((prev) => ({ ...prev, walletConnected: true, tokenBalance: 0 }));
+      setGameState((prev) => ({
+        ...prev,
+        walletConnected: true,
+        tokenBalance: 0,
+      }));
     } else {
-      setGameState((prev) => ({ ...prev, walletConnected: false }));
-      if (state.error) setTxStatus(`Error: ${state.error}`);
+      setGameState((prev) => ({
+        ...prev,
+        walletConnected: false,
+      }));
     }
-  };
-
-  // Switch (or add) Ritual Chain in wallet
-  const handleSwitchNetwork = async () => {
-    setNetworkSwitching(true);
-    setTxStatus('');
-    const result = await switchToRitualChain();
-    setNetworkSwitching(false);
-
-    if (!result.success) {
-      if (result.action === 'rejected') {
-        setTxStatus('Network switch cancelled. Please switch to Ritual Chain to continue.');
-      } else {
-        setTxStatus(`Error: ${result.error}`);
-      }
+    
+    if (state.error) {
+      setTxStatus(`Error: ${state.error}`);
     }
-    // On success the chainChanged event listener updates walletState.chainId automatically
   };
 
   // Handle wallet disconnection
@@ -253,12 +224,6 @@ export default function Home() {
   // Submit proof-of-presence transaction
   const handleProofOfPresence = async () => {
     if (!walletState.address) return;
-
-    // Guard: must be on Ritual Chain before submitting
-    if (!isOnCorrectChain) {
-      setTxStatus('Please switch to Ritual Chain first.');
-      return;
-    }
 
     setTxLoading(true);
     setTxStatus('Submitting proof-of-presence transaction...');
@@ -1067,30 +1032,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* Wrong Network Banner */}
-        {walletState.isConnected && !isOnCorrectChain && (
-          <div className="mb-4 p-4 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-3"
-            style={{ backgroundColor: '#fff3cd', border: '2px solid #f0a500' }}>
-            <div className="flex items-center gap-2">
-              <span className="text-xl">⚠️</span>
-              <div>
-                <p className="font-bold text-sm" style={{ color: '#7a4f00' }}>Wrong Network</p>
-                <p className="text-xs" style={{ color: '#7a4f00' }}>
-                  You're on chain {walletState.chainId ?? '?'}. Switch to Ritual Chain (ID {RITUAL_NET_CHAIN_ID}) to get tokens.
-                </p>
-              </div>
-            </div>
-            <Button
-              onClick={handleSwitchNetwork}
-              disabled={networkSwitching}
-              className="text-sm font-semibold px-4 py-2 whitespace-nowrap"
-              style={{ backgroundColor: '#f0a500', color: '#fff' }}
-            >
-              {networkSwitching ? 'Switching...' : '🔄 Switch to Ritual Chain'}
-            </Button>
-          </div>
-        )}
-
         {/* Game Canvas */}
         <div className="flex justify-center mb-8">
           <canvas
@@ -1155,50 +1096,28 @@ export default function Home() {
                     </Button>
                   )}
                   {gameState.walletConnected && (
-                    isOnCorrectChain ? (
-                      <Button
-                        onClick={handleProofOfPresence}
-                        disabled={txLoading}
-                        className="px-6 py-3 text-lg font-semibold"
-                        style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
-                      >
-                        {txLoading ? 'Processing...' : 'Get 500 Tokens (0.00001 gas)'}
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={handleSwitchNetwork}
-                        disabled={networkSwitching}
-                        className="px-6 py-3 text-lg font-semibold"
-                        style={{ backgroundColor: '#f0a500', color: '#fff' }}
-                      >
-                        {networkSwitching ? 'Switching...' : '🔄 Switch to Ritual Chain First'}
-                      </Button>
-                    )
+                    <Button
+                      onClick={handleProofOfPresence}
+                      disabled={txLoading}
+                      className="px-6 py-3 text-lg font-semibold"
+                      style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
+                    >
+                      {txLoading ? 'Processing...' : 'Get 500 Tokens (0.00001 gas)'}
+                    </Button>
                   )}
                 </div>
               ) : (
                 <>
                   {gameState.walletConnected ? (
                     <div className="space-y-3">
-                      {isOnCorrectChain ? (
-                        <Button
-                          onClick={handleProofOfPresence}
-                          disabled={txLoading}
-                          className="px-8 py-3 text-lg font-semibold"
-                          style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
-                        >
-                          {txLoading ? 'Processing...' : 'Get 500 More Tokens (0.00001 gas)'}
-                        </Button>
-                      ) : (
-                        <Button
-                          onClick={handleSwitchNetwork}
-                          disabled={networkSwitching}
-                          className="px-8 py-3 text-lg font-semibold"
-                          style={{ backgroundColor: '#f0a500', color: '#fff' }}
-                        >
-                          {networkSwitching ? 'Switching...' : '🔄 Switch to Ritual Chain'}
-                        </Button>
-                      )}
+                      <Button
+                        onClick={handleProofOfPresence}
+                        disabled={txLoading}
+                        className="px-8 py-3 text-lg font-semibold"
+                        style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
+                      >
+                        {txLoading ? 'Processing...' : 'Get 500 More Tokens (0.00001 gas)'}
+                      </Button>
                       <p className="text-xs" style={{ color: '#2d5a3d' }}>or</p>
                       <Button
                         onClick={startGame}
@@ -1268,25 +1187,14 @@ export default function Home() {
                       : 'Not enough tokens. Connect wallet for blockchain tokens!'}
                   </p>
                   {gameState.walletConnected ? (
-                    isOnCorrectChain ? (
-                      <Button
-                        onClick={handleProofOfPresence}
-                        disabled={txLoading}
-                        className="px-4 py-2 text-sm font-semibold"
-                        style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
-                      >
-                        {txLoading ? 'Processing...' : 'Get 500 Tokens'}
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={handleSwitchNetwork}
-                        disabled={networkSwitching}
-                        className="px-4 py-2 text-sm font-semibold"
-                        style={{ backgroundColor: '#f0a500', color: '#fff' }}
-                      >
-                        {networkSwitching ? 'Switching...' : '🔄 Switch to Ritual Chain'}
-                      </Button>
-                    )
+                    <Button
+                      onClick={handleProofOfPresence}
+                      disabled={txLoading}
+                      className="px-4 py-2 text-sm font-semibold"
+                      style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
+                    >
+                      {txLoading ? 'Processing...' : 'Get 500 Tokens'}
+                    </Button>
                   ) : (
                     <Button
                       onClick={handleConnectWallet}

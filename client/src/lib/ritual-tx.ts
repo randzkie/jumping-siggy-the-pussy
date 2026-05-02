@@ -22,13 +22,20 @@ export const submitProofOfPresence = async (_address: string, score: number = 0)
   try {
     const ethereum = getProvider();
     if (!ethereum) {
-      return { success: false, error: 'No wallet detected. Please install MetaMask, OKX, or Rabby.' };
+      return {
+        success: false,
+        error: 'No wallet detected. Please install MetaMask, OKX, or Rabby.',
+      };
     }
 
     if (!isAddress(PRESENCE_CONTRACT_ADDRESS)) {
-      return { success: false, error: `Invalid contract address: ${PRESENCE_CONTRACT_ADDRESS}` };
+      return {
+        success: false,
+        error: `Invalid contract address: ${PRESENCE_CONTRACT_ADDRESS}`,
+      };
     }
 
+    // Verify the wallet is on Ritual Chain
     const chainIdHex = await ethereum.request({ method: 'eth_chainId' });
     const chainId = parseInt(chainIdHex, 16);
     if (chainId !== RITUAL_NET_CHAIN_ID) {
@@ -38,17 +45,22 @@ export const submitProofOfPresence = async (_address: string, score: number = 0)
       };
     }
 
-    // Get signer directly — wallet popup appears here
+    // Get signer directly — no address mismatch check needed
     const provider = new BrowserProvider(ethereum);
     const signer = await provider.getSigner();
+
     const contract = new Contract(PRESENCE_CONTRACT_ADDRESS, PRESENCE_CONTRACT_ABI, signer);
 
+    // This call opens the wallet confirmation popup
     const tx = await contract.recordPresence(Math.max(0, Math.floor(score)));
-    return { success: true, txHash: tx.hash };
-
+    return {
+      success: true,
+      txHash: tx.hash,
+    };
   } catch (error: any) {
     console.error('submitProofOfPresence error:', error);
 
+    // User rejected the transaction in their wallet
     if (
       error.code === 'ACTION_REJECTED' ||
       error.code === 4001 ||
@@ -67,21 +79,30 @@ export const submitProofOfPresence = async (_address: string, score: number = 0)
       return { success: false, error: 'Ritual Network is busy. Please try again in a moment.' };
     }
 
-    return { success: false, error: error.message || 'Transaction failed. Please try again.' };
+    return {
+      success: false,
+      error: error.message || 'Transaction failed. Please try again.',
+    };
   }
 };
 
-export const waitForTransaction = async (txHash: string, maxAttempts: number = 60): Promise<boolean> => {
+export const waitForTransaction = async (
+  txHash: string,
+  maxAttempts: number = 60
+): Promise<boolean> => {
   try {
     const publicProvider = new JsonRpcProvider(PUBLIC_RPC_URL);
 
     for (let i = 0; i < maxAttempts; i++) {
       try {
         const receipt = await publicProvider.getTransactionReceipt(txHash);
-        if (receipt) return receipt.status === 1;
+        if (receipt) {
+          return receipt.status === 1;
+        }
       } catch (pollError) {
         console.warn('Polling error, retrying...', pollError);
       }
+
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
