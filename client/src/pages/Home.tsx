@@ -1016,54 +1016,48 @@ export default function Home() {
           <p className="text-lg mt-2" style={{ color: '#2d5a3d' }}>An endless runner on Ritual Net</p>
         </div>
 
-        {/* Wallet Connection */}
-        <div className="text-center mb-6">
-          {isWalletAvailable() ? (
-            walletState.isConnected ? (
-              <div className="space-y-3">
-                <div className="inline-flex items-center gap-3 px-4 py-2 rounded-lg" style={{ backgroundColor: '#e8f5e9', borderColor: '#2d5a3d', border: '1px solid' }}>
-                  <p className="text-sm" style={{ color: '#2d5a3d' }}>
-                    ✓ Connected: {formatAddress(walletState.address || '')}
-                  </p>
-                  <Button
-                    onClick={handleDisconnectWallet}
-                    variant="secondary"
-                    className="px-4 py-1 text-sm font-semibold"
-                    style={{ backgroundColor: '#f5f1ed', color: '#2d5a3d', border: '1px solid #2d5a3d' }}
-                  >
-                    Disconnect
-                  </Button>
-                </div>
-                <div className="inline-flex items-center gap-2 px-6 py-3 rounded-lg" style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}>
-                  <span className="text-2xl">🪙</span>
-                  <span className="text-lg font-bold">{gameState.tokenBalance} Tokens</span>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <Button
-                  onClick={handleConnectWallet}
-                  className="px-6 py-2 text-sm font-semibold"
-                  style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
-                >
-                  Connect Wallet
-                </Button>
-                <div className="inline-flex items-center gap-2 px-6 py-3 rounded-lg" style={{ backgroundColor: '#fff3e0', borderColor: '#2d5a3d', border: '1px solid' }}>
-                  <span className="text-2xl">🪙</span>
-                  <span className="text-lg font-bold" style={{ color: '#2d5a3d' }}>{gameState.tokenBalance} Tokens (Guest)</span>
-                </div>
-              </div>
-            )
+        {/* Wallet Bar — single compact row */}
+        <div className="flex items-center justify-between mb-4 px-3 py-2 rounded-lg"
+          style={{ backgroundColor: '#e8f5e9', border: '1px solid #2d5a3d' }}>
+
+          {/* Left: connection status */}
+          {walletState.isConnected ? (
+            <span className="text-xs font-mono" style={{ color: '#2d5a3d' }}>
+              ✓ {formatAddress(walletState.address || '')}
+            </span>
+          ) : isWalletAvailable() ? (
+            <button
+              onClick={handleConnectWallet}
+              className="text-xs font-semibold underline"
+              style={{ color: '#2d5a3d', background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              Connect Wallet
+            </button>
           ) : (
-            <div className="space-y-3">
-              <p className="text-sm" style={{ color: '#2d5a3d' }}>
-                No wallet detected. Play as guest or install MetaMask/OKX/Rabby.
-              </p>
-              <div className="inline-flex items-center gap-2 px-6 py-3 rounded-lg" style={{ backgroundColor: '#fff3e0', borderColor: '#2d5a3d', border: '1px solid' }}>
-                <span className="text-2xl">🪙</span>
-                <span className="text-lg font-bold" style={{ color: '#2d5a3d' }}>{gameState.tokenBalance} Tokens (Guest)</span>
-              </div>
-            </div>
+            <span className="text-xs" style={{ color: '#2d5a3d' }}>Guest mode</span>
+          )}
+
+          {/* Center: token balance */}
+          <span className="text-sm font-bold" style={{ color: '#2d5a3d' }}>
+            🪙 {gameState.tokenBalance}
+            <span className="font-normal text-xs ml-1">
+              {walletState.isConnected ? 'tokens' : 'tokens (guest)'}
+            </span>
+          </span>
+
+          {/* Right: disconnect or no-wallet hint */}
+          {walletState.isConnected ? (
+            <button
+              onClick={handleDisconnectWallet}
+              className="text-xs underline"
+              style={{ color: '#7a4f00', background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              Disconnect
+            </button>
+          ) : (
+            <span className="text-xs" style={{ color: '#9e9e9e' }}>
+              {isWalletAvailable() ? '' : 'No wallet'}
+            </span>
           )}
         </div>
 
