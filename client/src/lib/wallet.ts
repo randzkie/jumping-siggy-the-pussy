@@ -10,8 +10,16 @@ export interface WalletState {
 export const RITUAL_NET_CHAIN_ID = 696; // Ritual Net chain ID
 
 // Check if MetaMask is available
+// export const isMetaMaskAvailable = (): boolean => {
+//   return typeof window !== 'undefined' && (window as any).ethereum !== undefined;
+// };
 export const isMetaMaskAvailable = (): boolean => {
-  return typeof window !== 'undefined' && (window as any).ethereum !== undefined;
+  if (typeof window === 'undefined') return false;
+
+  return Boolean(
+    (window as any).ethereum ||
+    (window as any).okxwallet?.ethereum
+  );
 };
 
 // Connect wallet
