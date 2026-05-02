@@ -13,7 +13,8 @@ const PRESENCE_CONTRACT_ABI = [
   'function recordPresence(uint256 score) external',
 ];
 
-const PRESENCE_CONTRACT_ADDRESS = import.meta.env.VITE_PRESENCE_CONTRACT_ADDRESS;
+// const PRESENCE_CONTRACT_ADDRESS = import.meta.env.VITE_PRESENCE_CONTRACT_ADDRESS;
+ const PRESENCE_CONTRACT_ADDRESS =  import.meta.env.VITE_PRESENCE_CONTRACT_ADDRESS || '0x46637aa78c328edcc84ffc161b7b7e2545ee01a9';
 const PUBLIC_RPC_URL = 'https://rpc.ritualfoundation.org';
 
 // Helper to get a robust provider (tries browser first, falls back to public RPC for reads)
