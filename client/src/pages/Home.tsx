@@ -159,10 +159,34 @@ export default function Home() {
     const checkWallet = async () => {
       const state = await getWalletState();
       setWalletState(state);
-      setGameState((prev) => ({
-        ...prev,
-        walletConnected: state.isConnected,
-      }));
+      
+      if (state.isConnected) {
+        // If wallet connected, use tokens from localStorage (could be 0 or earned amount)
+        const storedTokens = parseInt(localStorage.getItem('siggy-tokens') || '0', 10);
+        setGameState((prev) => ({
+          ...prev,
+          walletConnected: true,
+          tokenBalance: storedTokens,
+        }));
+      } else {
+        // Guest mode - ensure 500 tokens
+        const storedTokens = parseInt(localStorage.getItem('siggy-tokens') || '500', 10);
+        if (storedTokens === 0) {
+          // Reset to 500 for guests
+          localStorage.setItem('siggy-tokens', '500');
+          setGameState((prev) => ({
+            ...prev,
+            walletConnected: false,
+            tokenBalance: 500,
+          }));
+        } else {
+          setGameState((prev) => ({
+            ...prev,
+            walletConnected: false,
+            tokenBalance: storedTokens,
+          }));
+        }
+      }
     };
     checkWallet();
   }, []);
@@ -171,11 +195,22 @@ export default function Home() {
   const handleConnectWallet = async () => {
     const state = await connectWallet();
     setWalletState(state);
-    // Preserve current token balance when connecting
-    setGameState((prev) => ({
-      ...prev,
-      walletConnected: state.isConnected,
-    }));
+    
+    if (state.isConnected) {
+      // Reset tokens to 0 when connecting wallet - force user to request from blockchain
+      localStorage.setItem('siggy-tokens', '0');
+      setGameState((prev) => ({
+        ...prev,
+        walletConnected: true,
+        tokenBalance: 0,
+      }));
+    } else {
+      setGameState((prev) => ({
+        ...prev,
+        walletConnected: false,
+      }));
+    }
+    
     if (state.error) {
       setTxStatus(`Error: ${state.error}`);
     }
@@ -185,10 +220,15 @@ export default function Home() {
   const handleDisconnectWallet = async () => {
     const state = await disconnectWallet();
     setWalletState(state);
+    
+    // Give back guest tokens when disconnecting
+    localStorage.setItem('siggy-tokens', '500');
     setGameState((prev) => ({
       ...prev,
-      walletConnected: state.isConnected,
+      walletConnected: false,
+      tokenBalance: 500,
     }));
+    
     setTxStatus('');
     setTxLoading(false);
   };
@@ -218,20 +258,28 @@ export default function Home() {
           setTxStatus('✓ Proof-of-presence recorded! +500 tokens added!');
           setTimeout(() => {
             setTxStatus('');
-            startGame();
-          }, 2000);
+          }, 3000);
         } else {
-          setTxStatus('Transaction pending or failed. You can still play!');
-          setTimeout(() => {
-            setTxStatus('');
-            startGame();
-          }, 2000);
+          setTxStatus('Transaction pending or failed. Please check your wallet and try again.');
         }
       } else {
-        setTxStatus(`Error: ${result.error}`);
+        // Handle specific error types
+        const errorMsg = result.error || 'Unknown error';
+        if (errorMsg.includes('RPC') || errorMsg.includes('network')) {
+          setTxStatus('Network is busy. Please wait a moment and try again.');
+        } else if (errorMsg.includes('user rejected') || errorMsg.includes('denied')) {
+          setTxStatus('Transaction cancelled by user.');
+        } else {
+          setTxStatus(`Error: ${errorMsg}`);
+        }
       }
     } catch (error: any) {
-      setTxStatus(`Error: ${error.message}`);
+      const errorMsg = error.message || 'Unknown error';
+      if (errorMsg.includes('RPC') || errorMsg.includes('network')) {
+        setTxStatus('Network connection issue. Please check your connection and try again.');
+      } else {
+        setTxStatus(`Error: ${errorMsg}`);
+      }
     } finally {
       setTxLoading(false);
     }
@@ -971,8 +1019,7 @@ export default function Home() {
             ) : (
               <div className="space-y-3">
                 <Button
-               onClick={handleConnectWallet}
-                  
+                  onClick={handleConnectWallet}
                   className="px-6 py-2 text-sm font-semibold"
                   style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
                 >
@@ -1019,9 +1066,22 @@ export default function Home() {
 
         {/* Transaction Status */}
         {txStatus && (
-          <div className="text-center mb-4 p-3 rounded-lg" style={{ backgroundColor: '#fff3e0', borderColor: '#2d5a3d', border: '1px solid' }}>
-            <p className="text-sm" style={{ color: '#2d5a3d' }}>
-              {txStatus}
+          <div className="text-center mb-4 p-3 rounded-lg relative" style={{ 
+            backgroundColor: txStatus.includes('Error') || txStatus.includes('error') ? '#ffebee' : '#fff3e0', 
+            borderColor: '#2d5a3d', 
+            border: '1px solid' 
+          }}>
+            <button
+              onClick={() => setTxStatus('')}
+              className="absolute top-2 right-2 text-lg font-bold"
+              style={{ color: '#2d5a3d' }}
+            >
+              ×
+            </button>
+            <p className="text-sm pr-6" style={{ color: '#2d5a3d' }}>
+              {txStatus.includes('RPC endpoint') 
+                ? 'Network busy. Please try again in a moment.' 
+                : txStatus}
             </p>
           </div>
         )}
@@ -1036,7 +1096,9 @@ export default function Home() {
                     ⚠️ Insufficient Tokens!
                   </p>
                   <p className="text-sm mb-4" style={{ color: '#2d5a3d' }}>
-                    You need at least 50 tokens to play. Connect your wallet to get more tokens!
+                    {gameState.walletConnected 
+                      ? 'Request 500 tokens from the blockchain to start playing!'
+                      : 'You need at least 50 tokens to play. Connect your wallet to get more tokens!'}
                   </p>
                   {!gameState.walletConnected && (
                     <Button
@@ -1068,7 +1130,7 @@ export default function Home() {
                         className="px-8 py-3 text-lg font-semibold"
                         style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
                       >
-                        {txLoading ? 'Processing...' : 'Get 500 Tokens (0.00001 gas)'}
+                        {txLoading ? 'Processing...' : 'Get 500 More Tokens (0.00001 gas)'}
                       </Button>
                       <p className="text-xs" style={{ color: '#2d5a3d' }}>or</p>
                       <Button
@@ -1112,7 +1174,7 @@ export default function Home() {
               {!gameState.walletConnected && gameState.tokenBalance < 100 && (
                 <div className="mb-6 p-4 rounded-lg" style={{ backgroundColor: '#e3f2fd', borderColor: '#2d5a3d', border: '1px solid' }}>
                   <p className="text-sm mb-3" style={{ color: '#2d5a3d' }}>
-                    Connect your wallet to get 500 tokens per transaction and never run out!
+                    Running low on tokens? Connect your wallet to get 500 tokens per transaction!
                   </p>
                   <Button
                     onClick={handleConnectWallet}
@@ -1134,15 +1196,28 @@ export default function Home() {
               ) : (
                 <div className="p-4 rounded-lg" style={{ backgroundColor: '#ffebee', borderColor: '#c62828', border: '1px solid' }}>
                   <p className="text-sm mb-3" style={{ color: '#c62828' }}>
-                    Not enough tokens to play again. Connect wallet for more!
+                    {gameState.walletConnected 
+                      ? 'Request more tokens from the blockchain to continue!'
+                      : 'Not enough tokens. Connect wallet for blockchain tokens!'}
                   </p>
-                  <Button
-                    onClick={handleConnectWallet}
-                    className="px-4 py-2 text-sm font-semibold"
-                    style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
-                  >
-                    Connect Wallet
-                  </Button>
+                  {gameState.walletConnected ? (
+                    <Button
+                      onClick={handleProofOfPresence}
+                      disabled={txLoading}
+                      className="px-4 py-2 text-sm font-semibold"
+                      style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
+                    >
+                      {txLoading ? 'Processing...' : 'Get 500 Tokens'}
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={handleConnectWallet}
+                      className="px-4 py-2 text-sm font-semibold"
+                      style={{ backgroundColor: '#2d5a3d', color: '#f5f1ed' }}
+                    >
+                      Connect Wallet
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -1152,7 +1227,9 @@ export default function Home() {
             Press <strong>SPACE</strong> to jump | <strong>DOWN ARROW</strong> to crawl | <strong>TAP</strong> to jump
           </p>
           <p className="text-xs" style={{ color: '#2d5a3d' }}>
-            💰 50 tokens per game | Score adds to token balance
+            {gameState.walletConnected 
+              ? '💰 50 tokens per game | Earn tokens = your score | Get 500 tokens via blockchain'
+              : '💰 50 tokens per game | Score adds to token balance | 500 guest tokens'}
           </p>
         </div>
       </div>
