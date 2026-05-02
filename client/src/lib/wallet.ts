@@ -7,7 +7,7 @@ export interface WalletState {
   error: string | null;
 }
 
-export const RITUAL_NET_CHAIN_ID = 696; // Ritual Net chain ID
+export const RITUAL_NET_CHAIN_ID = 1979; // Ritual Net chain ID
 
 // Get the available Ethereum provider
 export const getProvider = () => {
@@ -62,7 +62,7 @@ export const connectWallet = async (): Promise<WalletState> => {
                 {
                   chainId: `0x${RITUAL_NET_CHAIN_ID.toString(16)}`,
                   chainName: 'Ritual Net',
-                  rpcUrls: ['https://rpc.ritualnet.io'],
+                  rpcUrls: ['https://rpc.ritualfoundation.org'],
                   nativeCurrency: {
                     name: 'RITUAL',
                     symbol: 'RITUAL',

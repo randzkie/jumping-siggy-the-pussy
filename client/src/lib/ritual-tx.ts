@@ -14,7 +14,7 @@ const PRESENCE_CONTRACT_ABI = [
 ];
 
 const PRESENCE_CONTRACT_ADDRESS = import.meta.env.VITE_PRESENCE_CONTRACT_ADDRESS;
-const PUBLIC_RPC_URL = 'https://rpc.ritualnet.io';
+const PUBLIC_RPC_URL = 'https://rpc.ritualfoundation.org';
 
 // Helper to get a robust provider (tries browser first, falls back to public RPC for reads)
 const getRobustProvider = async () => {
